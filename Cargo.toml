@@ -19,6 +19,10 @@ codegen-units = 1
 incremental = false
 debug = false
 
+[dependencies]
+bevy-inspector-egui = "0.28.0"
+serde = "1.0.215"
+
 [dependencies.bevy]
 version = "0.14.2"
 # Disable the default features if there are any that you do not want
@@ -40,6 +44,7 @@ features = [
     "bevy_sprite",
     "bevy_ui",
     "bevy_winit",
+    "bevy_state",
     "default_font",
     "hdr",
     "ktx2",
