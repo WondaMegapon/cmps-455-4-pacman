@@ -1,14 +1,15 @@
 use bevy::prelude::*; // Always useful.
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub enum NodeType {
+pub enum JunctionType {
     None,        // There's nothing special about this node. Put a pellet here.
     PowerPellet, // Hey, gotta get rid of those ghosts somehow.
     GhostHouse,  // Ghost will spawn from and return here.
     BonusItem,   // Bonus items will appear here.
 }
 
-#[derive(Component)]
-pub struct Node(pub NodeType); // A node type. The position will be handled by a seperate thingy.
-#[derive(Component)]
-pub struct Connection(pub Entity, pub Option<Entity>); // Literally just a link between two nodes.
+pub struct Junction(pub Vec2, pub JunctionType); // A position and a type, as it should be.
+#[derive(Resource)]
+pub struct Junctions(pub Vec<Junction>); // A container of junctions, for storing with levels.
+#[derive(Resource)]
+pub struct Connections(pub Vec<Option<usize>>); // Literally just a link between two junctions. The index is the first node, the usize is the second.

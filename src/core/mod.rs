@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use game::GamePlugin;
 pub(super) struct CorePlugin; // The base of the game.
 
+pub mod constants; // Cooonstants~
 pub mod editor; // An eye on the editooor.
 pub mod game; // For the game systems themselves.
 pub mod game_state; // An eye on our states.

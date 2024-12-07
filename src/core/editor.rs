@@ -5,11 +5,17 @@ use bevy::{prelude::*, window::PrimaryWindow};
 pub(super) struct EditorPlugin;
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
-struct EditorGizmos {}
+struct EditorGizmos {} // Storing all of our fancy lil' editor gizmos.
+
+#[derive(Resource)]
+struct PossibleConnection(Option<usize>); // Allowing for connections to be wired if need be. (Junction, ConnectionPoint)
 
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
         app.init_gizmo_group::<EditorGizmos>()
+            .insert_resource(components::Junctions(Vec::new()))
+            .insert_resource(components::Connections(Vec::new()))
+            .insert_resource(PossibleConnection(None))
             .add_systems(Update, (render_editor).run_if(in_editor))
             .add_systems(
                 FixedUpdate,
@@ -45,18 +51,17 @@ fn manage_editors(
 
 // Editor input.
 fn nodes_input(
-    mut commands: Commands,
     query_windows: Query<&Window, With<PrimaryWindow>>,
     query_camera: Query<(&Camera, &GlobalTransform)>,
     buttons: Res<ButtonInput<MouseButton>>,
-    mut nodes: Query<(Entity, &mut Transform, &mut components::Node)>,
-    mut connections: Query<(Entity, &components::Connection)>,
+    mut junctions: ResMut<components::Junctions>,
+    mut connections: ResMut<components::Connections>,
 ) {
     // get the camera info and transform
     // assuming there is exactly one main camera entity, so Query::single() is OK
     let (camera, camera_transform) = query_camera.single();
 
-    // Handling LMB (Moving nodes.)
+    // Handling LMB (Moving junctions.)
     if buttons.pressed(MouseButton::Left) {
         if let Some(cursor_position) = query_windows
             .single()
@@ -64,19 +69,19 @@ fn nodes_input(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            if let Some(mut node) = nodes.iter_mut().find(|node| {
-                (node.1.translation.x - cursor_position.x).powf(2.0)
-                    + (node.1.translation.y - cursor_position.y).powf(2.0)
-                    < 30.0_f32.powf(2.0)
+            if let Some(junction) = junctions.0.iter_mut().find(|junction| {
+                (junction.0.x - cursor_position.x).powf(2.0)
+                    + (junction.0.y - cursor_position.y).powf(2.0)
+                    < EDITOR_JUNCTION_RADIUS.powf(2.0)
             }) {
-                // If we found a node under the cursor.
+                // If we found a junction under the cursor.
                 // Move iiit.
-                node.1.translation = Vec3::new(cursor_position.x, cursor_position.y, 0.0);
+                junction.0 = Vec2::new(cursor_position.x, cursor_position.y);
             }
         }
     }
 
-    // Creating, deleting nodes. via LMB
+    // Creating, deleting junctions. via LMB
     if buttons.just_pressed(MouseButton::Left) {
         if let Some(cursor_position) = query_windows
             .single()
@@ -84,26 +89,30 @@ fn nodes_input(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            if nodes
+            if junctions
+                .0
                 .iter()
-                .find(|node| {
-                    (node.1.translation.x - cursor_position.x).powf(2.0)
-                        + (node.1.translation.y - cursor_position.y).powf(2.0)
-                        < 30.0_f32.powf(2.0)
+                .find(|junction| {
+                    (junction.0.x - cursor_position.x).powf(2.0)
+                        + (junction.0.y - cursor_position.y).powf(2.0)
+                        < EDITOR_JUNCTION_RADIUS.powf(2.0)
                 })
                 .is_none()
             {
                 // Otherwise.
-                // Creating our node.
-                commands.spawn((
-                    Transform::from_xyz(cursor_position.x, cursor_position.y, 0.0),
-                    components::Node(components::NodeType::None),
-                ));
+                // Creating our junction.
+                junctions.0.push(components::Junction(
+                    Vec2::new(cursor_position.x, cursor_position.y),
+                    components::JunctionType::None,
+                )); // Our new junction.
+                for _i in 0..MAX_CONNECTIONS {
+                    connections.0.push(None); // Creating new spaces.
+                }
             }
         }
     }
 
-    // Creating, deleting nodes. via RMB
+    // Creating, deleting junctions. via RMB
     if buttons.just_pressed(MouseButton::Right) {
         if let Some(cursor_position) = query_windows
             .single()
@@ -111,18 +120,20 @@ fn nodes_input(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            if let Some(node) = nodes.iter().find(|node| {
-                (node.1.translation.x - cursor_position.x).powf(2.0)
-                    + (node.1.translation.y - cursor_position.y).powf(2.0)
-                    < 30.0_f32.powf(2.0)
+            if let Some(junction) = junctions.0.iter().position(|junction| {
+                (junction.0.x - cursor_position.x).powf(2.0)
+                    + (junction.0.y - cursor_position.y).powf(2.0)
+                    < EDITOR_JUNCTION_RADIUS.powf(2.0)
             }) {
-                // If we found a node under the cursor.
-                for connection in connections.iter_mut().filter(|connection| {
-                    connection.1 .0 == node.0 || connection.1 .1 == Some(node.0)
-                }) {
-                    commands.entity(connection.0).despawn(); // Deleting it's connections.
+                // If we found a junction under the cursor.
+                for _i in 0..MAX_CONNECTIONS {
+                    connections.0.remove(junction); // Removing this node's junctions.
                 }
-                commands.entity(node.0).despawn(); // Delebing it.
+                connections.0.retain(|connection| match connection {
+                    Some(x) => *x != junction,
+                    None => true,
+                }); // Removing other junctions.
+                junctions.0.remove(junction); // Delebing it.
             }
         }
     }
@@ -135,20 +146,26 @@ fn nodes_input(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            if let Some(mut node) = nodes.iter_mut().find(|node| {
-                (node.1.translation.x - cursor_position.x).powf(2.0)
-                    + (node.1.translation.y - cursor_position.y).powf(2.0)
-                    < 30.0_f32.powf(2.0)
+            if let Some(junction) = junctions.0.iter_mut().find(|junction| {
+                (junction.0.x - cursor_position.x).powf(2.0)
+                    + (junction.0.y - cursor_position.y).powf(2.0)
+                    < EDITOR_JUNCTION_RADIUS.powf(2.0)
             }) {
-                // If we found a node under the cursor.
-                // Change that node type.
-                match node.2 .0 {
-                    components::NodeType::None => node.2 .0 = components::NodeType::PowerPellet,
-                    components::NodeType::PowerPellet => {
-                        node.2 .0 = components::NodeType::GhostHouse
+                // If we found a junction under the cursor.
+                // Change that junction type.
+                match junction.1 {
+                    components::JunctionType::None => {
+                        junction.1 = components::JunctionType::PowerPellet
                     }
-                    components::NodeType::GhostHouse => node.2 .0 = components::NodeType::BonusItem,
-                    components::NodeType::BonusItem => node.2 .0 = components::NodeType::None,
+                    components::JunctionType::PowerPellet => {
+                        junction.1 = components::JunctionType::GhostHouse
+                    }
+                    components::JunctionType::GhostHouse => {
+                        junction.1 = components::JunctionType::BonusItem
+                    }
+                    components::JunctionType::BonusItem => {
+                        junction.1 = components::JunctionType::None
+                    }
                 }
             }
         }
@@ -160,8 +177,9 @@ fn connections_input(
     query_windows: Query<&Window, With<PrimaryWindow>>,
     query_camera: Query<(&Camera, &GlobalTransform)>,
     buttons: Res<ButtonInput<MouseButton>>,
-    nodes: Query<(Entity, &mut Transform, &mut components::Node)>,
-    mut connections: Query<(Entity, &mut components::Connection)>,
+    junctions: ResMut<components::Junctions>,
+    mut connections: ResMut<components::Connections>,
+    mut possible_connection: ResMut<PossibleConnection>,
 ) {
     // Same camera thing.
     let (camera, camera_transform) = query_camera.single();
@@ -176,26 +194,62 @@ fn connections_input(
             .map(|ray| ray.origin.truncate())
         {
             // Finding a node.
-            if let Some(node) = nodes.iter().find(|node| {
-                (node.1.translation.x - cursor_position.x).powf(2.0)
-                    + (node.1.translation.y - cursor_position.y).powf(2.0)
-                    < 30.0_f32.powf(2.0)
+            if let Some(junction) = junctions.0.iter().position(|junction| {
+                (junction.0.x - cursor_position.x).powf(2.0)
+                    + (junction.0.y - cursor_position.y).powf(2.0)
+                    < (EDITOR_JUNCTION_RADIUS + EDITOR_JUNCTION_CONNECTION_POINT_RADIUS).powf(2.0)
             }) {
-                // Finding some poor malformed connection.
-                if let Some(mut connection) = connections
-                    .iter_mut()
-                    .find(|connection| connection.1 .0 != node.0 && connection.1 .1.is_none())
-                {
-                    connection.1 .1 = Some(node.0); // Assigning that second connection
-                } else {
-                    commands.spawn(components::Connection(node.0, None)); // Assigning that first connection.
+                // *Or* finding a viable slot to put the connection in.
+                if let Some(connection_point) = (0..8).find(|connection_point| {
+                    let junction_start_pos = Quat::mul_vec3(
+                        Quat::from_rotation_z(
+                            (360 / MAX_CONNECTIONS * connection_point) as f32
+                                * std::f32::consts::PI
+                                / 180.0,
+                        ),
+                        Vec3::new(EDITOR_JUNCTION_RADIUS, 0.0_f32, 0.0_f32),
+                    )
+                    .xy()
+                        + junctions.0[junction].0;
+                    (junction_start_pos.x - cursor_position.x).powf(2.0)
+                        + (junction_start_pos.y - cursor_position.y).powf(2.0)
+                        < EDITOR_JUNCTION_CONNECTION_POINT_RADIUS.powf(2.0)
+                }) {
+                    // We found the node!
+                    // If there's nothing at this node.
+                    if connections.0[junction * MAX_CONNECTIONS + connection_point].is_none() {
+                        // Check to see if it has anything.
+                        match possible_connection.0 {
+                            Some(value) => {
+                                // If it's not the same as our existing connection.
+                                if value != junction * MAX_CONNECTIONS + connection_point {
+                                    connections.0[value] =
+                                        Some(junction * MAX_CONNECTIONS + connection_point); // Set the value.
+                                    connections.0[junction * MAX_CONNECTIONS + connection_point] =
+                                        Some(value); // Same the other way around.
+                                    possible_connection.0 = None; // Reset our possible connections.
+                                }
+                            }
+                            None => {
+                                // We have no existing connection.
+                                possible_connection.0 =
+                                    Some(junction * MAX_CONNECTIONS + connection_point);
+                                // Set the possible connection to the current one.
+                            }
+                        }
+                    }
                 }
+            } else {
+                // Oh, we didn't hit a node?
+                possible_connection.0 = None; // Get rid of the selection, since they probably didn't want it.
             }
         }
     }
 
     // Deleting them connections.
     if buttons.just_pressed(MouseButton::Right) {
+        possible_connection.0 = None; // Tossing the current selection, 'cause I'm assuming they didn't want it.
+
         // Finding our cursor.
         if let Some(cursor_position) = query_windows
             .single()
@@ -203,30 +257,23 @@ fn connections_input(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            // Finding a node.
-            if let Some(node) = nodes.iter().find(|node| {
-                (node.1.translation.x - cursor_position.x).powf(2.0)
-                    + (node.1.translation.y - cursor_position.y).powf(2.0)
-                    < 30.0_f32.powf(2.0)
+            // Finding a valid junction.
+            if let Some(junction) = junctions.0.iter().position(|junction| {
+                (junction.0.x - cursor_position.x).powf(2.0)
+                    + (junction.0.y - cursor_position.y).powf(2.0)
+                    < EDITOR_JUNCTION_RADIUS.powf(2.0)
             }) {
-                // Finding some poor malformed connection.
-                for connection in connections.iter_mut().filter(|connection| {
-                    connection.1 .0 == node.0
-                        || match connection.1 .1 {
-                            Some(value) => value == node.0,
-                            None => false,
-                        }
-                }) {
-                    commands.entity(connection.0).despawn(); // Byye.
+                // Junction found! Time to iterate.
+                for our_connection in 0..MAX_CONNECTIONS {
+                    // If we can find a valid connection.
+                    if let Some(their_connection) =
+                        connections.0[junction * MAX_CONNECTIONS + our_connection]
+                    {
+                        connections.0[their_connection] = None; // Get rid of the straggler.
+                        connections.0[junction * MAX_CONNECTIONS + our_connection] = None;
+                        // Get rid of us, too.
+                    }
                 }
-            }
-        } else {
-            // Deleting all malformed connections.
-            for connection in connections
-                .iter()
-                .filter(|connection| connection.1 .1.is_none())
-            {
-                commands.entity(connection.0).despawn(); // Begone.
             }
         }
     }
@@ -235,39 +282,86 @@ fn connections_input(
 // Rendering the current state of the editor.
 fn render_editor(
     mut editor_gizmos: Gizmos<EditorGizmos>,
-    nodes: Query<(Entity, &Transform, &components::Node)>,
-    connections: Query<(Entity, &components::Connection)>,
+    junctions: Res<components::Junctions>,
+    connections: Res<components::Connections>,
+    possible_connection: Res<PossibleConnection>,
 ) {
-    for node in nodes.iter() {
-        editor_gizmos.circle_2d(
-            node.1.translation.xy(),
-            30.0,
-            match node.2 .0 {
-                components::NodeType::None => bevy::color::palettes::css::LAVENDER,
-                components::NodeType::PowerPellet => bevy::color::palettes::css::GREEN,
-                components::NodeType::GhostHouse => bevy::color::palettes::css::BLUE,
-                components::NodeType::BonusItem => bevy::color::palettes::css::RED,
-            },
-        );
-    }
-
-    for connection in connections.iter() {
-        if let Ok(point_a) = nodes.get(connection.1 .0) {
-            if connection.1 .1.is_some() {
-                if let Ok(point_b) = nodes.get(connection.1 .1.unwrap()) {
-                    editor_gizmos.line_2d(
-                        point_a.1.translation.xy(),
-                        point_b.1.translation.xy(),
-                        bevy::color::palettes::css::LAVENDER,
-                    );
-                }
+    // For each of the junctions we have.
+    for (junction_index, junction) in junctions.0.iter().enumerate() {
+        // For each of the eight possible connections this junction could have.
+        for possible_connection_index in 0..MAX_CONNECTIONS {
+            let junction_start_pos = Quat::mul_vec3(
+                Quat::from_rotation_z(
+                    (360 / MAX_CONNECTIONS * possible_connection_index) as f32
+                        * std::f32::consts::PI
+                        / 180.0,
+                ),
+                Vec3::new(EDITOR_JUNCTION_RADIUS, 0.0_f32, 0.0_f32),
+            )
+            .xy()
+                + junction.0;
+            // If an index exists.
+            if let Some(found_junction_index) =
+                connections.0[junction_index * MAX_CONNECTIONS + possible_connection_index]
+            {
+                println!(
+                    "Connection at {:?} and {:?}",
+                    junction_index * MAX_CONNECTIONS + possible_connection_index,
+                    found_junction_index
+                );
+                // Get that position!
+                let junction_end_pos = (Quat::mul_vec3(
+                    Quat::from_rotation_z(
+                        (360 / MAX_CONNECTIONS * (found_junction_index % MAX_CONNECTIONS)) as f32
+                            * std::f32::consts::PI
+                            / 180.0,
+                    ),
+                    Vec3::new(EDITOR_JUNCTION_RADIUS, 0.0_f32, 0.0_f32),
+                )
+                .xy()
+                    + junctions.0[found_junction_index / MAX_CONNECTIONS].0
+                    - junction_start_pos)
+                    * 0.5;
+                // Draw a line!
+                editor_gizmos.ray_2d(
+                    junction_start_pos,
+                    junction_end_pos,
+                    bevy::color::palettes::css::LAVENDER,
+                );
+                // And a happy green circle.
+                editor_gizmos.circle_2d(
+                    junction_start_pos,
+                    EDITOR_JUNCTION_CONNECTION_POINT_RADIUS,
+                    bevy::color::palettes::css::GREEN,
+                );
             } else {
                 editor_gizmos.circle_2d(
-                    point_a.1.translation.xy(),
-                    5.0,
-                    bevy::color::palettes::css::RED,
+                    junction_start_pos,
+                    EDITOR_JUNCTION_CONNECTION_POINT_RADIUS,
+                    match possible_connection.0 {
+                        Some(value) => {
+                            if value
+                                == (junction_index * MAX_CONNECTIONS + possible_connection_index)
+                            {
+                                bevy::color::palettes::css::RED
+                            } else {
+                                bevy::color::palettes::css::LAVENDER
+                            }
+                        }
+                        None => bevy::color::palettes::css::GREY,
+                    },
                 );
             }
         }
+        editor_gizmos.circle_2d(
+            junction.0,
+            EDITOR_JUNCTION_RADIUS,
+            match junction.1 {
+                components::JunctionType::None => bevy::color::palettes::css::LAVENDER,
+                components::JunctionType::PowerPellet => bevy::color::palettes::css::GREEN,
+                components::JunctionType::GhostHouse => bevy::color::palettes::css::BLUE,
+                components::JunctionType::BonusItem => bevy::color::palettes::css::RED,
+            },
+        );
     }
 }
