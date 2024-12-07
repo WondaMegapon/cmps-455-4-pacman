@@ -10,4 +10,5 @@ pub enum NodeType {
 
 #[derive(Component)]
 pub struct Node(pub NodeType); // A node type. The position will be handled by a seperate thingy.
-pub struct Connection(pub usize, pub usize); // Literally just an index to the node.
+#[derive(Component)]
+pub struct Connection(pub Entity, pub Option<Entity>); // Literally just a link between two nodes.
