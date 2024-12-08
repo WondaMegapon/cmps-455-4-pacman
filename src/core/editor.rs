@@ -126,14 +126,34 @@ fn nodes_input(
                     < EDITOR_JUNCTION_RADIUS.powf(2.0)
             }) {
                 // If we found a junction under the cursor.
-                for _i in 0..MAX_CONNECTIONS {
-                    connections.0.remove(junction); // Removing this node's junctions.
+                for current_connection in 0..MAX_CONNECTIONS {
+                    // If there's any valid connections here.
+                    if let Some(other_connection) =
+                        connections.0[junction * MAX_CONNECTIONS + current_connection]
+                    {
+                        connections.0[other_connection] = None; // Removing the connections to this junction.
+                        connections.0[junction * MAX_CONNECTIONS + current_connection] = None;
+                        // Removing this junction's connections.
+                    }
                 }
-                connections.0.retain(|connection| match connection {
-                    Some(x) => *x != junction,
-                    None => true,
-                }); // Removing other junctions.
-                junctions.0.remove(junction); // Delebing it.
+
+                // And just toss these connections, after cleaning data.
+                for _i in 0..MAX_CONNECTIONS {
+                    connections.0.remove(junction * MAX_CONNECTIONS);
+                }
+
+                // And shuffle everything on the right back a bit.
+                for remaining_index in 0..connections.0.len() {
+                    if let Some(found_remaining_index) = connections.0[remaining_index]
+                        .filter(|index| index > &(junction * MAX_CONNECTIONS))
+                    {
+                        connections.0[remaining_index] =
+                            Some(found_remaining_index - MAX_CONNECTIONS); // Decrementing the found value.
+                    }
+                }
+
+                // Delebing it, for real this time.
+                junctions.0.remove(junction);
             }
         }
     }
@@ -173,7 +193,6 @@ fn nodes_input(
 }
 
 fn connections_input(
-    mut commands: Commands,
     query_windows: Query<&Window, With<PrimaryWindow>>,
     query_camera: Query<(&Camera, &GlobalTransform)>,
     buttons: Res<ButtonInput<MouseButton>>,
@@ -304,11 +323,6 @@ fn render_editor(
             if let Some(found_junction_index) =
                 connections.0[junction_index * MAX_CONNECTIONS + possible_connection_index]
             {
-                println!(
-                    "Connection at {:?} and {:?}",
-                    junction_index * MAX_CONNECTIONS + possible_connection_index,
-                    found_junction_index
-                );
                 // Get that position!
                 let junction_end_pos = (Quat::mul_vec3(
                     Quat::from_rotation_z(
