@@ -13,8 +13,6 @@ struct PossibleConnection(Option<usize>); // Allowing for connections to be wire
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
         app.init_gizmo_group::<EditorGizmos>()
-            .insert_resource(components::Junctions(Vec::new()))
-            .insert_resource(components::Connections(Vec::new()))
             .insert_resource(PossibleConnection(None))
             .add_systems(Update, (render_editor).run_if(in_editor))
             .add_systems(

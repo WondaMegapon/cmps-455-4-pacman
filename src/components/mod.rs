@@ -1,4 +1,5 @@
-use bevy::prelude::*; // Always useful.
+use crate::core::prelude::GameState;
+use bevy::prelude::*; // Always useful. // Other necessaries.
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum JunctionType {
@@ -8,6 +9,8 @@ pub enum JunctionType {
     BonusItem,   // Bonus items will appear here.
 }
 
+#[derive(Component)]
+pub struct DestroyWhenNotThisState(pub GameState); // Holds a given game state to destroy useless components on.
 pub struct Junction(pub Vec2, pub JunctionType); // A position and a type, as it should be.
 #[derive(Resource)]
 pub struct Junctions(pub Vec<Junction>); // A container of junctions, for storing with levels.
