@@ -3,6 +3,20 @@ name = "cmps-455-4-pacman"
 version = "0.1.0"
 edition = "2021"
 
+# Targets!
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Zshare-generics=y"]
+
+# NOTE: you must manually install https://github.com/michaeleisel/zld on mac. you can easily do this with the "brew" package manager:
+# `brew install michaeleisel/zld/zld`
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld", "-Zshare-generics=y"]
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+rustflags = ["-Zshare-generics=y"]
+
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
 opt-level = 1

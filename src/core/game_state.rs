@@ -4,7 +4,34 @@ pub(super) struct GameStatePlugin;
 
 impl Plugin for GameStatePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_state(GameState::Editor(Editor::Nodes)); // Setting our default state.
+        app.insert_state(GameState::Editor(Editor::Nodes))
+        .add_systems(FixedUpdate, transition_states); // Setting our default state.
+    }
+}
+
+// TODO: Put a transition function here.
+
+fn transition_states (
+    mut commands: Commands,
+    buttons: Res<ButtonInput<KeyCode>>,
+    current_state: Res<State<GameState>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    // match current_state.get() {
+    //     Menu(menu) => todo!(),
+    //     Editor(editor) => todo!(),
+    //     Playing(playing) => todo!(),
+    // }
+    if buttons.just_pressed(KeyCode::Digit1) {
+        next_state.set(GameState::Editor(Editor::Nodes));
+    }
+
+    if buttons.just_pressed(KeyCode::Digit2) {
+        next_state.set(GameState::Playing(Playing::New));
+    }
+
+    if buttons.just_pressed(KeyCode::Digit3) {
+        next_state.set(GameState::Playing(Playing::Running));
     }
 }
 

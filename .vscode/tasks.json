@@ -7,10 +7,17 @@
 			"problemMatcher": [
 				"$rustc"
 			],
-			"label": "rust: cargo run --feature \"bevy/dynamic_linking\"",
+			"label": "Normal ol' Cargo",
 			"group": {
 				"kind": "build",
-				"isDefault": true
+			}
+		},
+		{
+			"type": "shell",
+			"command": "nix-shell --run \"cargo run\"",
+			"label": "Shelled Nix",
+			"group": {
+				"kind": "build",
 			}
 		}
 	]

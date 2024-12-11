@@ -8,10 +8,10 @@ pub struct DestroyWhenNotThisState(pub GameState); // Holds a given game state t
 // These are for anything that needs to navigate the level mesh.
 #[derive(Component)]
 pub struct NavAgent {
-    junction_target: Option<usize>, // This is the junction this agent is currently headed towards. (None for no movement)
-    junction_pool: Vec<usize>, // These are all the available junctions this node can travel towards.
-    type_base: NavAgentType,   // This is the behavior that the agent inherits.
-    type_modified: Option<NavAgentType>, // This is the behavior that the agent can be granted by external means.
+    pub junction_target: Option<usize>, // This is the junction this agent is currently headed towards. (None for no movement)
+    pub junction_pool: Vec<usize>, // These are all the available junctions this node can travel towards.
+    pub type_base: NavAgentType,   // This is the behavior that the agent inherits.
+    pub type_modified: Option<NavAgentType>, // This is the behavior that the agent can be granted by external means.
 }
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum NavAgentType {
