@@ -5,16 +5,14 @@ pub(super) struct GameStatePlugin;
 impl Plugin for GameStatePlugin {
     fn build(&self, app: &mut App) {
         app.insert_state(GameState::Editor(Editor::Nodes))
-        .add_systems(FixedUpdate, transition_states); // Setting our default state.
+            .add_systems(FixedUpdate, transition_states); // Setting our default state.
     }
 }
 
 // TODO: Put a transition function here.
 
-fn transition_states (
-    mut commands: Commands,
+fn transition_states(
     buttons: Res<ButtonInput<KeyCode>>,
-    current_state: Res<State<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     // match current_state.get() {
@@ -65,12 +63,12 @@ pub enum Playing {
     Complete, // The player did it and beat the level.
 }
 
-pub fn in_menu(current_state: Res<State<GameState>>) -> bool {
-    matches!(
-        current_state.get(),
-        crate::core::prelude::GameState::Menu(_)
-    )
-}
+// pub fn in_menu(current_state: Res<State<GameState>>) -> bool {
+//     matches!(
+//         current_state.get(),
+//         crate::core::prelude::GameState::Menu(_)
+//     )
+// }
 
 pub fn in_editor(current_state: Res<State<GameState>>) -> bool {
     matches!(
@@ -79,9 +77,9 @@ pub fn in_editor(current_state: Res<State<GameState>>) -> bool {
     )
 }
 
-pub fn in_playing(current_state: Res<State<GameState>>) -> bool {
-    matches!(
-        current_state.get(),
-        crate::core::prelude::GameState::Playing(_)
-    )
-}
+// pub fn in_playing(current_state: Res<State<GameState>>) -> bool {
+//     matches!(
+//         current_state.get(),
+//         crate::core::prelude::GameState::Playing(_)
+//     )
+// }

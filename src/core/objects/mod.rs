@@ -8,6 +8,6 @@ pub mod agents;
 
 impl Plugin for ObjectPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((AgentPlugin));
+        app.add_plugins(AgentPlugin);
     }
 }
